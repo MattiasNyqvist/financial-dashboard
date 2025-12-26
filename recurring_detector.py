@@ -6,8 +6,31 @@ Licensed under the MIT License
 """
 
 import pandas as pd
+import streamlit as st
 from datetime import timedelta
 from typing import List, Dict
+
+
+def format_kr_local(number, decimals=0):
+    """
+    Local helper for formatting in recurring_detector.
+    Uses session state if available, otherwise defaults to Swedish.
+    """
+    if not hasattr(st, 'session_state') or 'number_format' not in st.session_state:
+        num_format = 'swedish'
+    else:
+        num_format = st.session_state.get('number_format', 'swedish')
+    
+    if num_format == 'swedish':
+        if decimals == 0:
+            return f"{number:,.0f}".replace(',', ' ')
+        else:
+            return f"{number:,.{decimals}f}".replace(',', '|').replace('.', ',').replace('|', ' ')
+    else:
+        if decimals == 0:
+            return f"{number:,.0f}"
+        else:
+            return f"{number:,.{decimals}f}"
 
 
 def detect_recurring_payments(df: pd.DataFrame, min_occurrences: int = 3) -> pd.DataFrame:
@@ -127,7 +150,6 @@ def calculate_recurring_totals(recurring_df: pd.DataFrame) -> Dict:
 
 def render_recurring_payments_ui(recurring_df: pd.DataFrame):
     """Render recurring payments in Streamlit."""
-    import streamlit as st
     
     if recurring_df.empty:
         st.info("No recurring payments detected. Need at least 3 occurrences to identify patterns.")
@@ -145,10 +167,10 @@ def render_recurring_payments_ui(recurring_df: pd.DataFrame):
         st.metric("Total Subscriptions", totals['count'])
     
     with col2:
-        st.metric("Monthly Recurring Cost", f"{totals['monthly_total']:,.0f} kr")
+        st.metric("Monthly Recurring Cost", f"{format_kr_local(totals['monthly_total'])} kr")
     
     with col3:
-        st.metric("Yearly Recurring Cost", f"{totals['yearly_total']:,.0f} kr")
+        st.metric("Yearly Recurring Cost", f"{format_kr_local(totals['yearly_total'])} kr")
     
     st.markdown("---")
     
@@ -157,7 +179,7 @@ def render_recurring_payments_ui(recurring_df: pd.DataFrame):
     
     # Format for display
     display_df = recurring_df.copy()
-    display_df['amount'] = display_df['amount'].apply(lambda x: f"{x:,.0f} kr")
+    display_df['amount'] = display_df['amount'].apply(lambda x: f"{format_kr_local(x)} kr")
     display_df['first_date'] = pd.to_datetime(display_df['first_date']).dt.strftime('%Y-%m-%d')
     display_df['last_date'] = pd.to_datetime(display_df['last_date']).dt.strftime('%Y-%m-%d')
     

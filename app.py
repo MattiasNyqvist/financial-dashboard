@@ -33,6 +33,34 @@ from categorizer import (
 # Load environment variables
 load_dotenv()
 
+# Helper function for number formatting
+def format_kr(number, decimals=0):
+    """
+    Format number based on user preference.
+    Swedish: 23 500,50 kr (space separator, comma decimal)
+    International: 23,500.50 kr (comma separator, period decimal)
+    """
+    if pd.isna(number):
+        return "0"
+    
+    # Get user preference (default to Swedish)
+    num_format = st.session_state.get('number_format', 'swedish')
+    
+    if num_format == 'swedish':
+        # Swedish format: space separator, comma decimal
+        if decimals == 0:
+            formatted = f"{number:,.0f}".replace(',', ' ')
+        else:
+            formatted = f"{number:,.{decimals}f}".replace(',', '|').replace('.', ',').replace('|', ' ')
+    else:
+        # International format: comma separator, period decimal
+        if decimals == 0:
+            formatted = f"{number:,.0f}"
+        else:
+            formatted = f"{number:,.{decimals}f}"
+    
+    return formatted
+
 # Page config
 st.set_page_config(
     page_title="Financial Dashboard",
@@ -47,6 +75,9 @@ if 'df' not in st.session_state:
 
 if 'categorized' not in st.session_state:
     st.session_state.categorized = False
+
+if 'number_format' not in st.session_state:
+    st.session_state.number_format = 'swedish'
 
 # Title and description
 st.title("Financial Dashboard")
@@ -99,6 +130,8 @@ if st.session_state.df is None:
     - **amount**: Transaction amount (positive for income, negative for expenses)
     - **account** (optional): Account name
     
+    Supports both Swedish (semicolon, comma) and International (comma, period) CSV formats.
+    
     Example:
     """)
     
@@ -109,8 +142,6 @@ if st.session_state.df is None:
         'account': ['Credit Card', 'Checking', 'Credit Card']
     })
     st.dataframe(example_df, use_container_width=True)
-    
-
     
     # Footer in sidebar
     st.sidebar.markdown("---")
@@ -171,6 +202,19 @@ transaction_type = st.sidebar.radio(
 
 df = filter_by_type(df, transaction_type)
 
+# Number formatting preference
+st.sidebar.markdown("---")
+st.sidebar.subheader("Number Format")
+
+number_format = st.sidebar.radio(
+    "Regional Format",
+    ["Swedish (23 500 kr)", "International (23,500 kr)"],
+    index=0,
+    help="Choose number format style"
+)
+
+st.session_state.number_format = 'swedish' if number_format.startswith('Swedish') else 'international'
+
 # Footer in sidebar
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**Version:** {__version__}")
@@ -188,21 +232,21 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric(
         "Total Income",
-        f"{stats['total_income']:,.0f} kr",
+        f"{format_kr(stats['total_income'])} kr",
         help="Total income in selected period"
     )
 
 with col2:
     st.metric(
         "Total Expenses",
-        f"{stats['total_expenses']:,.0f} kr",
+        f"{format_kr(stats['total_expenses'])} kr",
         help="Total expenses in selected period"
     )
 
 with col3:
     st.metric(
         "Net Savings",
-        f"{stats['net_savings']:,.0f} kr",
+        f"{format_kr(stats['net_savings'])} kr",
         delta=f"{stats['savings_rate']:.1f}%",
         help="Income minus expenses"
     )
@@ -210,7 +254,7 @@ with col3:
 with col4:
     st.metric(
         "Transactions",
-        f"{stats['num_transactions']:,}",
+        f"{format_kr(stats['num_transactions'])}",
         help="Number of transactions"
     )
 
@@ -254,7 +298,13 @@ if st.session_state.categorized and 'category' in df.columns:
         # Category summary table
         st.markdown("### Category Summary")
         category_summary = get_category_summary(expense_df)
-        st.dataframe(category_summary, use_container_width=True)
+        
+        # Format the numbers in the table
+        display_summary = category_summary.copy()
+        display_summary['Total'] = display_summary['Total'].apply(lambda x: f"{format_kr(x)} kr")
+        display_summary['Average'] = display_summary['Average'].apply(lambda x: f"{format_kr(x)} kr")
+        
+        st.dataframe(display_summary, use_container_width=True)
     else:
         st.info("No expenses to categorize in the selected date range")
 
@@ -288,10 +338,13 @@ st.subheader("Recent Transactions")
 # Display options
 num_to_show = st.selectbox("Number of transactions to display", [10, 25, 50, 100], index=0)
 
-# Show transactions
-display_df = df.head(num_to_show)[['date', 'description', 'amount', 'type']]
+# Show transactions with formatted amounts
+display_df = df.head(num_to_show)[['date', 'description', 'amount', 'type']].copy()
 if 'category' in df.columns:
-    display_df = df.head(num_to_show)[['date', 'description', 'amount', 'category', 'type']]
+    display_df = df.head(num_to_show)[['date', 'description', 'amount', 'category', 'type']].copy()
+
+# Format amounts
+display_df['amount'] = display_df['amount'].apply(lambda x: f"{format_kr(x, decimals=2)} kr")
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
@@ -341,10 +394,10 @@ else:
             
             col2a, col2b = st.columns(2)
             with col2a:
-                st.metric("Budget (Period)", f"{total_budget_period:,.0f} kr")
-                st.metric("Spent (Period)", f"{total_spent_period:,.0f} kr")
+                st.metric("Budget (Period)", f"{format_kr(total_budget_period)} kr")
+                st.metric("Spent (Period)", f"{format_kr(total_spent_period)} kr")
             with col2b:
-                st.metric("Remaining", f"{total_remaining:,.0f} kr")
+                st.metric("Remaining", f"{format_kr(total_remaining)} kr")
                 if total_budget_period > 0:
                     st.metric("Usage", f"{(total_spent_period/total_budget_period*100):.1f}%")
             
@@ -356,9 +409,9 @@ else:
             
             col2c, col2d = st.columns(2)
             with col2c:
-                st.metric("Monthly Budget", f"{monthly_budget:,.0f} kr")
+                st.metric("Monthly Budget", f"{format_kr(monthly_budget)} kr")
             with col2d:
-                st.metric("Avg Monthly Spending", f"{monthly_spent:,.0f} kr")
+                st.metric("Avg Monthly Spending", f"{format_kr(monthly_spent)} kr")
         
         # Progress bars per category
         st.markdown("---")

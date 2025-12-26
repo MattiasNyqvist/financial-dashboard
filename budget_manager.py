@@ -22,6 +22,28 @@ DEFAULT_BUDGETS = {
 }
 
 
+def format_kr_local(number, decimals=0):
+    """
+    Local helper for formatting in budget_manager.
+    Uses session state if available, otherwise defaults to Swedish.
+    """
+    if not hasattr(st, 'session_state') or 'number_format' not in st.session_state:
+        num_format = 'swedish'
+    else:
+        num_format = st.session_state.get('number_format', 'swedish')
+    
+    if num_format == 'swedish':
+        if decimals == 0:
+            return f"{number:,.0f}".replace(',', ' ')
+        else:
+            return f"{number:,.{decimals}f}".replace(',', '|').replace('.', ',').replace('|', ' ')
+    else:
+        if decimals == 0:
+            return f"{number:,.0f}"
+        else:
+            return f"{number:,.{decimals}f}"
+
+
 def render_budget_editor(current_budgets: dict = None) -> dict:
     """
     Render budget editor UI.
@@ -103,14 +125,14 @@ def render_budget_progress(budget_df, period_months=1):
         with col1:
             st.markdown(f"**{category}**")
             st.progress(min(percent / 100, 1.0))
-            st.caption(f"{monthly_spent:,.0f} kr / {monthly_budget:,.0f} kr ({percent:.1f}%) - Monthly Average")
+            st.caption(f"{format_kr_local(monthly_spent)} kr / {format_kr_local(monthly_budget)} kr ({percent:.1f}%) - Monthly Average")
         
         with col2:
             if monthly_remaining >= 0:
-                st.metric("Remaining", f"{monthly_remaining:,.0f} kr")
+                st.metric("Remaining", f"{format_kr_local(monthly_remaining)} kr")
             else:
-                st.metric("Over by", f"{abs(monthly_remaining):,.0f} kr", 
-                         delta=f"{abs(monthly_remaining):,.0f} kr", 
+                st.metric("Over by", f"{format_kr_local(abs(monthly_remaining))} kr", 
+                         delta=f"{format_kr_local(abs(monthly_remaining))} kr", 
                          delta_color="inverse")
         
         st.markdown("")  # Spacing
