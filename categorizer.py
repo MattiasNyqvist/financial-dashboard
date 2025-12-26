@@ -150,3 +150,69 @@ def get_category_summary(df: pd.DataFrame) -> pd.DataFrame:
     summary = summary.sort_values('Total', ascending=False)
     
     return summary
+
+def get_budget_status(df: pd.DataFrame, budgets: dict) -> pd.DataFrame:
+    """
+    Compare actual spending against budgets.
+    
+    Args:
+        df: DataFrame with categorized transactions
+        budgets: Dictionary of {category: budget_amount}
+        
+    Returns:
+        DataFrame with budget comparison
+    """
+    # Get actual spending by category (expenses only)
+    expense_df = df[df['type'] == 'Expense'].copy()
+    actual = expense_df.groupby('category')['abs_amount'].sum()
+    
+    # Create comparison DataFrame
+    budget_data = []
+    for category, budget in budgets.items():
+        spent = actual.get(category, 0)
+        remaining = budget - spent
+        percent_used = (spent / budget * 100) if budget > 0 else 0
+        status = 'Over Budget' if spent > budget else 'Within Budget'
+        
+        budget_data.append({
+            'Category': category,
+            'Budget': budget,
+            'Spent': spent,
+            'Remaining': remaining,
+            'Percent Used': percent_used,
+            'Status': status
+        })
+    
+    budget_df = pd.DataFrame(budget_data)
+    budget_df = budget_df.sort_values('Percent Used', ascending=False)
+    
+    return budget_df
+
+
+def suggest_budgets(df: pd.DataFrame, multiplier: float = 1.2) -> dict:
+    """
+    Suggest budgets based on historical spending.
+    
+    Args:
+        df: DataFrame with categorized transactions
+        multiplier: Budget multiplier (default 1.2 = 20% buffer)
+        
+    Returns:
+        Dictionary of suggested budgets
+    """
+    expense_df = df[df['type'] == 'Expense'].copy()
+    
+    # Calculate number of months in data
+    date_range_days = (expense_df['date'].max() - expense_df['date'].min()).days
+    num_months = max(1, date_range_days / 30.44)
+    
+    # Calculate total spending per category
+    total_spending = expense_df.groupby('category')['abs_amount'].sum()
+    
+    # Calculate monthly average
+    monthly_avg = total_spending / num_months
+    
+    # Add buffer for unexpected expenses
+    suggested = (monthly_avg * multiplier).round(-2)  # Round to nearest 100
+    
+    return suggested.to_dict()

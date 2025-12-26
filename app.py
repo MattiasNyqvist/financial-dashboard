@@ -24,7 +24,9 @@ from data_processor import (
 from categorizer import (
     categorize_transactions_bulk,
     get_category_summary,
-    DEFAULT_CATEGORIES
+    DEFAULT_CATEGORIES,
+    get_budget_status,
+    suggest_budgets
 )
 
 # Load environment variables
@@ -286,6 +288,91 @@ if 'category' in df.columns:
     display_df = df.head(num_to_show)[['date', 'description', 'amount', 'category', 'type']]
 
 st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+# Budget Tracking Section
+st.markdown("---")
+st.subheader("Budget Tracking")
+
+# Check if categorized
+if not st.session_state.categorized:
+    st.info("Categorize transactions first to use budget tracking")
+else:
+    # Import budget functions
+    from budget_manager import render_budget_editor, render_budget_progress, create_budget_gauge_chart, DEFAULT_BUDGETS
+    
+    # Initialize budgets in session state
+    if 'budgets' not in st.session_state:
+        st.session_state.budgets = DEFAULT_BUDGETS.copy()
+    
+    # Tabs for budget management
+    tab1, tab2 = st.tabs(["Budget Overview", "Set Budgets"])
+    
+    with tab1:
+        # Calculate number of months in data
+        date_range_days = (df['date'].max() - df['date'].min()).days
+        date_range_months = max(1, round(date_range_days / 30.44))
+        
+        # Show period info
+        st.info(f"Analyzing {date_range_months} months of data: {df['date'].min().strftime('%Y-%m-%d')} to {df['date'].max().strftime('%Y-%m-%d')}")
+        
+        # Get budget status
+        budget_df = get_budget_status(df[df['type'] == 'Expense'], st.session_state.budgets)
+        
+        # Overall metrics
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            # Gauge chart with monthly average
+            fig_gauge = create_budget_gauge_chart(budget_df, period_months=date_range_months)
+            st.plotly_chart(fig_gauge, use_container_width=True)
+        
+        with col2:
+            # Period totals
+            st.markdown("#### Period Totals")
+            total_budget_period = budget_df['Budget'].sum() * date_range_months
+            total_spent_period = budget_df['Spent'].sum()
+            total_remaining = total_budget_period - total_spent_period
+            
+            col2a, col2b = st.columns(2)
+            with col2a:
+                st.metric("Budget (Period)", f"{total_budget_period:,.0f} kr")
+                st.metric("Spent (Period)", f"{total_spent_period:,.0f} kr")
+            with col2b:
+                st.metric("Remaining", f"{total_remaining:,.0f} kr")
+                if total_budget_period > 0:
+                    st.metric("Usage", f"{(total_spent_period/total_budget_period*100):.1f}%")
+            
+            # Monthly averages
+            st.markdown("---")
+            st.markdown("#### Monthly Averages")
+            monthly_budget = budget_df['Budget'].sum()
+            monthly_spent = total_spent_period / date_range_months
+            
+            col2c, col2d = st.columns(2)
+            with col2c:
+                st.metric("Monthly Budget", f"{monthly_budget:,.0f} kr")
+            with col2d:
+                st.metric("Avg Monthly Spending", f"{monthly_spent:,.0f} kr")
+        
+        # Progress bars per category
+        st.markdown("---")
+        render_budget_progress(budget_df, period_months=date_range_months)
+    
+    with tab2:
+        # Auto-suggest budgets
+        if st.button("Suggest Budgets Based on Spending"):
+            suggested = suggest_budgets(df)
+            st.session_state.budgets = suggested
+            st.success("Budgets updated based on your spending patterns")
+            st.rerun()
+        
+        # Budget editor
+        updated_budgets = render_budget_editor(st.session_state.budgets)
+        
+        if st.button("Save Budgets", type="primary"):
+            st.session_state.budgets = updated_budgets
+            st.success("Budgets saved successfully")
+            st.rerun()
 
 # Download data
 st.markdown("---")
