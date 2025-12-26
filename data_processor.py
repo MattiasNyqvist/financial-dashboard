@@ -12,6 +12,7 @@ from typing import Optional, Tuple
 def load_transaction_file(file) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """
     Load transaction data from uploaded CSV or Excel file.
+    Handles both Swedish (semicolon, comma decimal) and International (comma, period decimal) formats.
     
     Args:
         file: Uploaded file object from Streamlit
@@ -22,11 +23,38 @@ def load_transaction_file(file) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     try:
         # Determine file type
         if file.name.endswith('.csv'):
-            df = pd.read_csv(file)
+            # Try Swedish format first (semicolon separator, comma decimal)
+            try:
+                df = pd.read_csv(file, sep=';', decimal=',', encoding='utf-8')
+                # Check if we got valid data
+                if df.shape[1] < 2:
+                    raise ValueError("Too few columns")
+            except:
+                # Try international format (comma separator, period decimal)
+                file.seek(0)  # Reset file pointer
+                try:
+                    df = pd.read_csv(file, sep=',', decimal='.', encoding='utf-8')
+                except:
+                    # Last attempt: let pandas auto-detect
+                    file.seek(0)
+                    df = pd.read_csv(file)
+        
         elif file.name.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(file)
         else:
             return None, "Unsupported file format. Please upload CSV or Excel file."
+        
+        # Normalize column names (handle both Swedish and English)
+        column_mapping = {
+            'datum': 'date',
+            'beskrivning': 'description',
+            'belopp': 'amount',
+            'konto': 'account'
+        }
+        
+        # Rename Swedish columns to English
+        df.columns = df.columns.str.lower().str.strip()
+        df.rename(columns=column_mapping, inplace=True)
         
         # Validate required columns
         required_columns = ['date', 'description', 'amount']
@@ -122,3 +150,56 @@ def calculate_summary_stats(df: pd.DataFrame) -> dict:
         'num_transactions': num_transactions,
         'savings_rate': (net_savings / total_income * 100) if total_income > 0 else 0
     }
+
+def load_csv_file(filepath: str) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
+    """
+    Load CSV file from filepath (for sample data).
+    Handles both Swedish and International formats.
+    
+    Args:
+        filepath: Path to CSV file
+        
+    Returns:
+        Tuple of (DataFrame, error_message)
+    """
+    try:
+        # Try Swedish format first (semicolon separator, comma decimal)
+        try:
+            df = pd.read_csv(filepath, sep=';', decimal=',', encoding='utf-8')
+            # Check if we got valid data
+            if df.shape[1] < 2:
+                raise ValueError("Too few columns")
+        except:
+            # Try international format (comma separator, period decimal)
+            try:
+                df = pd.read_csv(filepath, sep=',', decimal='.', encoding='utf-8')
+            except:
+                # Last attempt: let pandas auto-detect
+                df = pd.read_csv(filepath)
+        
+        # Normalize column names (handle both Swedish and English)
+        column_mapping = {
+            'datum': 'date',
+            'beskrivning': 'description',
+            'belopp': 'amount',
+            'konto': 'account'
+        }
+        
+        # Rename Swedish columns to English
+        df.columns = df.columns.str.lower().str.strip()
+        df.rename(columns=column_mapping, inplace=True)
+        
+        # Validate required columns
+        required_columns = ['date', 'description', 'amount']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            return None, f"Missing required columns: {', '.join(missing_columns)}"
+        
+        # Process data
+        df = process_transactions(df)
+        
+        return df, None
+        
+    except Exception as e:
+        return None, f"Error loading file: {str(e)}"

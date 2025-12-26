@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from version import __version__, __author__, __license__
 from data_processor import (
     load_transaction_file,
+    load_csv_file,
     calculate_summary_stats,
     filter_by_date_range,
     filter_by_type,
@@ -63,11 +64,14 @@ uploaded_file = st.sidebar.file_uploader(
 # Load sample data button
 if st.sidebar.button("Load Sample Data"):
     try:
-        sample_df = pd.read_csv('data/sample_transactions.csv')
-        from data_processor import process_transactions
-        st.session_state.df = process_transactions(sample_df)
-        st.session_state.categorized = False
-        st.sidebar.success("Sample data loaded successfully")
+        df, error = load_csv_file('data/sample_transactions.csv')
+        
+        if error:
+            st.sidebar.error(f"Error loading sample data: {error}")
+        else:
+            st.session_state.df = df
+            st.session_state.categorized = False
+            st.sidebar.success("Sample data loaded successfully")
     except Exception as e:
         st.sidebar.error(f"Error loading sample data: {str(e)}")
 
@@ -105,6 +109,8 @@ if st.session_state.df is None:
         'account': ['Credit Card', 'Checking', 'Credit Card']
     })
     st.dataframe(example_df, use_container_width=True)
+    
+
     
     # Footer in sidebar
     st.sidebar.markdown("---")
