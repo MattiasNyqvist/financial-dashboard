@@ -374,6 +374,54 @@ else:
             st.success("Budgets saved successfully")
             st.rerun()
 
+# Recurring Payments Section
+st.markdown("---")
+st.subheader("Recurring Payments")
+
+# Check if categorized
+if not st.session_state.categorized:
+    st.info("Categorize transactions first to detect recurring payments")
+else:
+    # Import recurring payment functions
+    from recurring_detector import detect_recurring_payments, render_recurring_payments_ui
+    
+    # Initialize recurring payments in session state
+    if 'recurring_payments' not in st.session_state:
+        st.session_state.recurring_payments = None
+    
+    # Detection controls
+    col1, col2 = st.columns([1, 4])
+    
+    with col1:
+        min_occurrences = st.number_input(
+            "Min occurrences",
+            min_value=2,
+            max_value=10,
+            value=3,
+            help="Minimum number of times a payment must occur to be considered recurring"
+        )
+        
+        if st.button("Detect Recurring Payments", type="primary", use_container_width=True):
+            with st.spinner("Analyzing payment patterns..."):
+                recurring_df = detect_recurring_payments(df, min_occurrences=min_occurrences)
+                st.session_state.recurring_payments = recurring_df
+                
+                if not recurring_df.empty:
+                    st.success(f"Found {len(recurring_df)} recurring payments!")
+                else:
+                    st.info("No recurring payments detected with current settings.")
+    
+    with col2:
+        if st.session_state.recurring_payments is not None:
+            st.caption("Detected recurring payments shown below. Adjust 'Min occurrences' and re-detect to refine results.")
+    
+    # Display recurring payments if available
+    if st.session_state.recurring_payments is not None:
+        st.markdown("---")
+        render_recurring_payments_ui(st.session_state.recurring_payments)
+    else:
+        st.info("Click 'Detect Recurring Payments' to identify subscriptions and recurring costs in your transactions.")
+
 # AI Insights Section
 st.markdown("---")
 st.subheader("AI Insights & Recommendations")
