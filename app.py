@@ -374,6 +374,66 @@ else:
             st.success("Budgets saved successfully")
             st.rerun()
 
+# AI Insights Section
+st.markdown("---")
+st.subheader("AI Insights & Recommendations")
+
+# Check if categorized
+if not st.session_state.categorized:
+    st.info("Categorize transactions first to get AI-powered insights")
+else:
+    # Import AI insights functions
+    from ai_insights import generate_spending_insights, render_insights_ui
+    
+    # Check for API key
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    
+    if not api_key:
+        st.warning("API key not configured. Set ANTHROPIC_API_KEY in .env file to use AI insights.")
+    else:
+        # Initialize insights in session state
+        if 'ai_insights' not in st.session_state:
+            st.session_state.ai_insights = None
+        
+        # Generate insights button
+        col1, col2 = st.columns([1, 4])
+        
+        with col1:
+            if st.button("Generate AI Insights", type="primary", use_container_width=True):
+                with st.spinner("Analyzing your spending patterns with AI..."):
+                    # Calculate period
+                    date_range_days = (df['date'].max() - df['date'].min()).days
+                    date_range_months = max(1, round(date_range_days / 30.44))
+                    
+                    # Get budget data
+                    if 'budgets' not in st.session_state:
+                        from budget_manager import DEFAULT_BUDGETS
+                        st.session_state.budgets = DEFAULT_BUDGETS.copy()
+                    
+                    budget_df = get_budget_status(df[df['type'] == 'Expense'], st.session_state.budgets)
+                    
+                    # Generate insights
+                    insights = generate_spending_insights(
+                        df=df,
+                        budget_df=budget_df,
+                        api_key=api_key,
+                        period_months=date_range_months
+                    )
+                    
+                    st.session_state.ai_insights = insights
+                    st.success("AI insights generated successfully!")
+        
+        with col2:
+            if st.session_state.ai_insights:
+                st.caption("Last generated insights shown below. Click 'Generate AI Insights' to refresh.")
+        
+        # Display insights if available
+        if st.session_state.ai_insights:
+            st.markdown("---")
+            render_insights_ui(st.session_state.ai_insights)
+        else:
+            st.info("Click 'Generate AI Insights' to get personalized recommendations based on your spending patterns.")
+
 # Download data
 st.markdown("---")
 st.subheader("Export Data")
